@@ -1,0 +1,203 @@
+---
+title: "Advanced Data Analysis | Final Group Project | Spring 2018"
+output: html_notebook
+date: "April 25, 2018"
+author: "Jasmine Chiaka Chukwueke" <JChukwueke@wustl.edu>"; Keenya Frazier <frazierks@wustl.edu>; Chaitanay Siddagunta <c.siddag@wustl.edu>
+---
+
+'# PROLOG   ################################################################'
+
+'# PROJECT: Advanced Data Analysis | Final Group Project
+'# PURPOSE: FINAL PROJECT RCODE for COURSE SPECIAL TOPICS: ADVANCED DATA ANALYSIS
+            Poisson and Negative Binomial regression. and use of R markdown
+
+'# DIR:     https://wustl.blackboard.com/webapps/blackboard/execute/content/file?cmd=view|content_id=_3357249_1|course_id=_189741_1|framesetWrapped=true
+
+'# DATA:    Adult.2.csv | peds.csv
+
+'# AUTHOR:  Chukwueke, Jasmine C; Fraizer Keenya; Chaitu Siddagunta
+'# CREATED: April 18, 2018
+'# LATEST:  April 23, 2018
+'# NOTES:   # Final Group Project | RCode
+            # Reference for ggplot2: http://www.cookbook-r.com/Graphs/
+            # Reference for Margins pkg: http://cran.us.r-project.org
+            # Reference for Stargazer pkg: http://cran.us.r-project.org
+'# PROLOG   ###############################################################'
+
+
+#### Load the libraries
+
+```{r}
+# install.packages("margins",repos = "http://cran.us.r-project.org") 
+# install.packages("stargazer",repos = "http://cran.us.r-project.org")
+library(haven) #read dta file 
+library(MASS) #Negative binomial regression 
+library(lmtest) #model comparison 
+library(stargazer) #models presentation 
+library(sandwich)  #robust  
+library(margins) #Marginal effects 
+library(ggplot2) #Graphs 
+library(readxl) # excel file
+library(tidyverse)
+```
+
+#### Read data(Adult Patients)
+
+```{r}
+adult <- read_csv("~/Dropbox/WashU | MPH/Learning | In St. Louis/2017 - 2018/Spring 2018/Advanced Data Analysis/Final Group Project/Adult.2.csv")
+adult$Age <- "Adult"
+View(adult)
+```
+
+#### Read data(Pediatric Patients)
+
+```{r}
+peds <- read.csv("~/Dropbox/WashU | MPH/Learning | In St. Louis/2017 - 2018/Spring 2018/Advanced Data Analysis/Final Group Project/peds.csv")
+View(peds)
+peds$SIR <- NA
+peds$Age <- "Child"
+```
+
+#### Merge two datasets
+
+```{r}
+Patients <- rbind(peds, adult)
+View(Patients)
+```
+
+#### Data management on the Dataset
+
+```{r}
+str(Patients)
+Patients
+#Code to Crete two new "Age" Variables: One character and One factor:
+Patients$Age.f <- as.factor(Patients$Age)
+str(Patients)
+table(Patients$Age.f)
+Patients$Age_cat[Patients$Age=="Child"] <- 0
+Patients$Age_cat[Patients$Age=="Adult"] <- 1
+str(Patients$Age_cat)
+Patients$Age_cat <- as.character(Patients$Age_cat)
+Patients$Age.f <- as.factor(Patients$Age_cat)
+table(Patients$Age.f)
+class(Patients$Age.f)
+table(Patients$Age)
+class(Patients$Age)
+
+#Create a New Variable: Infection_cat
+table(Patients$Infection_Count)
+Patients$Infection_cat <- NA
+str(Patients)
+Patients$Infection_cat[Patients$Infection_Count==0] <- 0
+Patients$Infection_cat[Patients$Infection_Count> 0] <- 1
+str(Patients)
+View(Patients)
+#Create a New Variable: Infection.f
+Patients$Infection.f <- as.factor(Patients$Infection_cat)
+str(Patients)
+# 7953 Rows | 17 Columns
+
+#Change event to numeric:
+Patients$Infection.f<- as.numeric(Patients$Infection.f)
+
+#View Operative Procedures
+table(Patients$Operative_Procedure)
+
+Patients$OperativeProcedure[Patients$Operative_Procedure==0] <- 0
+Patients$Infection_cat[Patients$Infection_Count> 0] <- 1
+
+```
+
+#### Recode Opeartive_Procedure variable as a factor variable and label it
+
+```{r}
+
+##Recode Opeartive_Procedure variable as a factor variable and label it
+Patients$Surgery.f[
+  Patients$Operative_Procedure=="Appendix surgery"| Patients$Operative_Procedure=="Bile duct, liver or pancreatic surgery" | Patients$Operative_Procedure=="Colon surgery " | Patients$Operative_Procedure=="Exploratory abdomial surgery (laparotomy)" | Patients$Operative_Procedure=="Gallbladder surgery" | Patients$Operative_Procedure=="Hysterectomy,abdominal" | Patients$Operative_Procedure=="Rectal surgery" | Patients$Operative_Procedure=="Small bowel surgery" | Patients$Operative_Procedure=="Exploratory abdominal surgery (laparotomy)" | Patients$Operative_Procedure=="Gastric surgery" | Patients$Operative_Procedure=="Hysterectomy, abdominal" | Patients$Operative_Procedure=="Spleen surgery" | Patients$Operative_Procedure=="Kidney surgery"]<-0
+
+Patients$Surgery.f[
+  Patients$Operative_Procedure=="Cardiac surgery"| Patients$Operative_Procedure=="Thoracic surgery" | Patients$Operative_Procedure=="Abdominal aortic aneurysm repair" | Patients$Operative_Procedure=="Coronary bypass, chest and donor incisions" | Patients$Operative_Procedure=="Coronary bypass, chest incision only" | Patients$Operative_Procedure=="Pacemaker surgery"] <- 1
+
+Patients$Surgery.f[
+  Patients$Operative_Procedure=="Cesarean section" | Patients$Operative_Procedure=="Hysterectomy, vaginal" | Patients$Operative_Procedure=="Ovarian surgery"] <- 2
+
+Patients$Surgery.f[
+  Patients$Operative_Procedure=="Kidney transplant"| Patients$Operative_Procedure=="Liver transplant " | Patients$Operative_Procedure=="Heart transplant "] <- 3
+
+Patients$Surgery.f[
+  Patients$Operative_Procedure=="Hip prosthesis"| Patients$Operative_Procedure=="Knee prosthesis" | Patients$Operative_Procedure=="Laminectomy" |Patients$Operative_Procedure=="Open reduction of fracture"| Patients$Operative_Procedure=="Spinal fusion"] <- 4
+
+table(Patients$Surgery.f)
+class(Patients$Surgery.f)
+
+Patients$Surgery.f <- factor(Patients$Surgery.f,
+  levels = c(0,1,2,3,4),
+  labels = c("Abdominal", "Thoracic", "Pelvic", "Transplant", "MSK"))
+class(Patients$Surgery.f)
+table(Patients$Surgery.f)
+
+#What should be the reference?
+#Pelvic and MSK = Same
+#Abdominal, Thoracic, Transplant = Different
+```
+
+#### Run a Poisson regression model for age category, type of surgery performed,and SSIs as the dependent variable (remember the predictors as factor variables).
+
+```{r}
+str(Patients)
+modP<- glm(as.numeric(Infection.f) ~ factor(Age.f)+factor(Surgery.f) + Procedure_Count, family="poisson", data=Patients)
+summary(modP)
+```
+
+#### Run a Negative Binomial regression model for age, type of surgery performed as predictors and SSIs as the dependent variable.
+
+```{r}
+modN<- glm.nb(Infection.f ~ factor(Age.f) + factor(Surgery.f) + Procedure_Count, data=Patients)
+summary(modN)
+```
+
+#### Compare models using the likelihood ratio test. Which model is better and on what basis do you make that conclusion?
+
+```{r}
+lrtest(modP, modN)
+```
+
+```{r}
+stargazer(modP, modN, title="Model Comparison", type="text",align=TRUE,single.row=TRUE)
+```
+
+#### Compute robust standard errors and calculate incidence rate ratios and 95% CIs using the robust standard errors
+
+```{r}
+robust<-coeftest(modN, vcov = sandwich) 
+robust
+```
+
+####Incidence rate ratios and 95%CIs
+
+```{r}
+est <- cbind(IRR = coef(modN), "2.5%"=robust[,1]-1.96*robust[,2], "97.5%"=robust[,1]+1.96*robust[,2])
+exp(est)
+```
+
+#### How well did our models do at predicting 0's
+
+```{r}
+mu <- predict(modP, type = "response") # predict expected mean count
+exp <- sum(dpois(x = 0, lambda = mu)) # sum the probabilities of a 0 count for each mean
+round(exp) # predicted number of 0's
+sum(Patients$Infection.f < 1) # observed number of 0's
+```
+
+#### number of counts of SSIs in the last 30 days
+
+```{r}
+p <- ggplot(data=Patients)
+p <- p + geom_bar(aes(x=Surgery.f))
+p <- p + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+p
+
+```
+
+[End of Code]
